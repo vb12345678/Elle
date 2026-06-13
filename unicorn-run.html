@@ -103,6 +103,25 @@
   }
 
   .play-btn:hover { transform: scale(1.06); }
+
+  .mute-btn {
+    position: fixed;
+    top: 14px;
+    right: 18px;
+    z-index: 20;
+    width: 46px;
+    height: 46px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 1.4rem;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: background 0.2s;
+  }
+
+  .mute-btn:hover { background: rgba(255, 255, 255, 0.28); }
 </style>
 </head>
 <body>
@@ -112,7 +131,10 @@
     <a href="nutella-facts.html">Nutella Facts</a>
     <a href="kwame-facts.html">Kwami Facts</a>
     <a href="unicorn-run.html">Unicorn Run</a>
+    <a href="solar-system.html">Solar System</a>
   </nav>
+
+  <button class="mute-btn" id="muteBtn" title="Music on / off">&#128266;</button>
 
   <div class="game-wrap">
     <canvas id="game"></canvas>
@@ -191,6 +213,7 @@
     reset();
     state = "play";
     overlay.classList.add("hidden");
+    Music.start();
   }
 
   function gameOver() {
@@ -222,6 +245,85 @@
   });
   canvas.addEventListener("pointerdown", handlePress);
   startBtn.addEventListener("click", function (e) { e.stopPropagation(); startGame(); });
+
+  // ---- Background music (Web Audio, no files needed) ----
+  const Music = (function () {
+    const NOTE = {
+      0: 0, C3: 130.81, E3: 164.81, F3: 174.61, G3: 196.00, A3: 220.00,
+      G4: 392.00, A4: 440.00, B4: 493.88, C5: 523.25, D5: 587.33, E5: 659.25, G5: 783.99
+    };
+    // bouncy 4-bar loop in C (I - vi - IV - V), eighth notes
+    const MELODY = [
+      "C5","E5","G5","E5", "A4","C5","E5","C5",
+      "A4","C5","A4","G4", "B4","D5","B4","G4",
+      "C5","E5","G5","E5", "A4","C5","E5","C5",
+      "G4","B4","D5","G4", "C5",0,0,0
+    ].map(n => NOTE[n] || 0);
+    const BASS = [
+      "C3","C3","A3","A3", "F3","F3","G3","G3",
+      "C3","C3","A3","A3", "G3","G3","C3","C3"
+    ].map(n => NOTE[n] || 0);
+
+    const tempo = 138, eighth = 60 / tempo / 2;
+    let ctx, master, timer = null, nextTime = 0, step = 0, muted = false;
+
+    function tone(freq, t, dur, type, vol) {
+      if (!freq) return;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      o.connect(g); g.connect(master);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.start(t);
+      o.stop(t + dur + 0.02);
+    }
+
+    function scheduler() {
+      while (nextTime < ctx.currentTime + 0.15) {
+        const m = MELODY[step % MELODY.length];
+        tone(m, nextTime, eighth * 0.9, "square", 0.07);
+        if (step % 2 === 0) {
+          const b = BASS[(step / 2) % BASS.length];
+          tone(b, nextTime, eighth * 1.8, "triangle", 0.11);
+        }
+        nextTime += eighth;
+        step++;
+      }
+      timer = setTimeout(scheduler, 30);
+    }
+
+    return {
+      start() {
+        if (!ctx) {
+          ctx = new (window.AudioContext || window.webkitAudioContext)();
+          master = ctx.createGain();
+          master.gain.value = muted ? 0 : 0.5;
+          master.connect(ctx.destination);
+        }
+        if (ctx.state === "suspended") ctx.resume();
+        if (timer === null) { nextTime = ctx.currentTime + 0.1; scheduler(); }
+      },
+      setMuted(m) {
+        muted = m;
+        if (master) master.gain.value = m ? 0 : 0.5;
+      }
+    };
+  })();
+
+  let musicMuted = localStorage.getItem("unicornMute") === "1";
+  const muteBtn = document.getElementById("muteBtn");
+  muteBtn.innerHTML = musicMuted ? "&#128263;" : "&#128266;";
+  Music.setMuted(musicMuted);
+  muteBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    musicMuted = !musicMuted;
+    localStorage.setItem("unicornMute", musicMuted ? "1" : "0");
+    muteBtn.innerHTML = musicMuted ? "&#128263;" : "&#128266;";
+    Music.setMuted(musicMuted);
+    Music.start();
+  });
 
   // ---- Drawing ----
   function drawBackground() {
@@ -295,15 +397,108 @@
     }
     ctx.globalAlpha = 1;
 
-    // unicorn emoji with a little run bob (flipped to face right)
+    // full unicorn body with a little run bob
     const bob = unicorn.onGround ? Math.sin(frame * 0.4) * 3 : 0;
-    ctx.font = unicorn.size + "px serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
+    drawUnicornBody(unicorn.x, unicorn.y + bob, unicorn.size);
+  }
+
+  const RAINBOW = ["#ff5b5b", "#ffae3b", "#ffe93b", "#5bff7a", "#5bd2ff", "#b06bff"];
+
+  // Draws a whole unicorn facing right, feet resting at feetY.
+  function drawUnicornBody(cx, feetY, u) {
+    const s = u / 60;
+    const gallop = unicorn.onGround ? frame * 0.45 : 1.2;
     ctx.save();
-    ctx.translate(unicorn.x, unicorn.y + bob);
-    ctx.scale(-1, 1);
-    ctx.fillText("🦄", 0, 0);
+    ctx.translate(cx, feetY);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    // --- Tail (rainbow, behind body) ---
+    ctx.lineWidth = 5 * s;
+    for (let i = 0; i < RAINBOW.length; i++) {
+      const wob = Math.sin(frame * 0.18 + i * 0.6) * 4 * s;
+      ctx.strokeStyle = RAINBOW[i];
+      ctx.beginPath();
+      ctx.moveTo(-26 * s, (-46 + i * 3) * s);
+      ctx.quadraticCurveTo((-44 - i) * s, (-30 + wob) * s, (-36 + i * 1.5) * s, (-2 + wob) * s);
+      ctx.stroke();
+    }
+
+    // --- Legs (galloping) ---
+    ctx.strokeStyle = "#f0e4ee";
+    ctx.lineWidth = 6 * s;
+    const hipY = -16 * s;
+    function leg(hipX, phase) {
+      const off = Math.sin(gallop + phase) * 9 * s;
+      ctx.beginPath();
+      ctx.moveTo(hipX, hipY);
+      ctx.lineTo(hipX + off, -1 * s);
+      ctx.stroke();
+    }
+    leg(-18 * s, 0);          // back legs
+    leg(-13 * s, Math.PI);
+    leg(15 * s, Math.PI);     // front legs
+    leg(20 * s, 0);
+
+    // --- Body ---
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.ellipse(0, -30 * s, 28 * s, 17 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- Neck + head ---
+    ctx.beginPath();
+    ctx.moveTo(16 * s, -38 * s);
+    ctx.lineTo(26 * s, -40 * s);
+    ctx.lineTo(40 * s, -62 * s);
+    ctx.lineTo(48 * s, -58 * s);
+    ctx.lineTo(34 * s, -34 * s);
+    ctx.closePath();
+    ctx.fill();
+    // head
+    ctx.beginPath();
+    ctx.ellipse(46 * s, -60 * s, 11 * s, 9 * s, -0.5, 0, Math.PI * 2);
+    ctx.fill();
+    // muzzle
+    ctx.beginPath();
+    ctx.ellipse(54 * s, -54 * s, 6 * s, 5 * s, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- Mane (rainbow along the neck) ---
+    ctx.lineWidth = 4 * s;
+    for (let i = 0; i < RAINBOW.length; i++) {
+      ctx.strokeStyle = RAINBOW[i];
+      const t = i / (RAINBOW.length - 1);
+      ctx.beginPath();
+      ctx.moveTo((40 - t * 26) * s, (-66 + t * 30) * s);
+      ctx.lineTo((34 - t * 26) * s, (-60 + t * 30) * s);
+      ctx.stroke();
+    }
+
+    // --- Horn ---
+    ctx.fillStyle = "#ffd24d";
+    ctx.beginPath();
+    ctx.moveTo(48 * s, -70 * s);
+    ctx.lineTo(44 * s, -82 * s);
+    ctx.lineTo(52 * s, -69 * s);
+    ctx.closePath();
+    ctx.fill();
+
+    // --- Ear ---
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(40 * s, -68 * s);
+    ctx.lineTo(38 * s, -78 * s);
+    ctx.lineTo(46 * s, -70 * s);
+    ctx.closePath();
+    ctx.fill();
+
+    // --- Eye ---
+    ctx.fillStyle = "#3a2a3a";
+    ctx.beginPath();
+    ctx.arc(49 * s, -60 * s, 2 * s, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.restore();
   }
 
@@ -330,12 +525,20 @@
     { emoji: "🪵", size: 46 }, // log
     { emoji: "🪨", size: 40 }, // rock
     { emoji: "🍄", size: 40 }, // mushroom
-    { emoji: "🌲", size: 30 }  // small evergreen
+    { emoji: "🌲", size: 34 }, // small evergreen
+    { emoji: "🦄", size: 50 }, // another unicorn!
+    { emoji: "🦊", size: 42 }, // fox
+    { emoji: "🦔", size: 36 }, // hedgehog
+    { emoji: "🐗", size: 46 }, // boar
+    { emoji: "🦌", size: 50 }, // deer
+    { emoji: "🐢", size: 38 }, // turtle
+    { emoji: "🌳", size: 40 }, // bush/tree
+    { emoji: "🪺", size: 36 }  // nest
   ];
 
-  function spawnObstacle() {
+  function spawnObstacle(xOffset) {
     const t = OBSTACLE_TYPES[Math.floor(Math.random() * OBSTACLE_TYPES.length)];
-    obstacles.push({ x: W + 60, emoji: t.emoji, size: t.size, w: t.size * 0.7, h: t.size });
+    obstacles.push({ x: W + 60 + (xOffset || 0), emoji: t.emoji, size: t.size, w: t.size * 0.7, h: t.size });
   }
 
   function update() {
@@ -357,7 +560,9 @@
       spawnTimer--;
       if (spawnTimer <= 0) {
         spawnObstacle();
-        spawnTimer = Math.max(45, 110 - speed * 4) + Math.random() * 40;
+        // once it speeds up, sometimes send a little group (still jumpable)
+        if (speed > 8 && Math.random() < 0.3) spawnObstacle(48 + Math.random() * 24);
+        spawnTimer = Math.max(38, 100 - speed * 4) + Math.random() * 35;
       }
 
       // move + collide

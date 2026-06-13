@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Elle Explores Space</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<style>
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: #05030f;
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #fff;
+    overflow: hidden;
+  }
+
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    gap: 26px;
+    padding: 16px 0;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(4px);
+    z-index: 10;
+    flex-wrap: wrap;
+  }
+
+  nav a {
+    color: #fff;
+    text-decoration: none;
+    font-size: 1.3rem;
+    transition: color 0.2s, text-shadow 0.2s;
+  }
+
+  nav a:hover {
+    color: #ffce9a;
+    text-shadow: 0 0 12px #ffce9a;
+  }
+
+  .game-wrap {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+  }
+
+  .hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.08);
+    padding: 8px 18px;
+    border-radius: 20px;
+    z-index: 12;
+    pointer-events: none;
+    text-align: center;
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: rgba(5, 3, 15, 0.7);
+    backdrop-filter: blur(2px);
+    z-index: 15;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+
+  .overlay.hidden { display: none; }
+
+  .overlay h1 {
+    font-family: "Pacifico", cursive;
+    font-size: clamp(2.3rem, 7vw, 4.5rem);
+    margin: 0 0 12px;
+    color: #ffe3b8;
+    text-shadow: 0 0 22px #c98a3e;
+  }
+
+  .overlay p { font-size: clamp(1.05rem, 3.2vw, 1.5rem); margin: 6px 0; max-width: 640px; }
+
+  .astro-elle {
+    width: clamp(150px, 34vw, 240px);
+    height: auto;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 0 22px rgba(255, 206, 140, 0.5));
+    animation: floatY 3s ease-in-out infinite;
+  }
+
+  @keyframes floatY {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+
+  .play-btn {
+    margin-top: 24px;
+    padding: 14px 40px;
+    font-size: 1.5rem;
+    font-family: "Pacifico", cursive;
+    color: #4a3120;
+    background: linear-gradient(90deg, #f6c891, #e89a6b);
+    border: none;
+    border-radius: 40px;
+    cursor: pointer;
+    box-shadow: 0 0 22px rgba(232, 154, 107, 0.7);
+    transition: transform 0.15s;
+  }
+
+  .play-btn:hover { transform: scale(1.06); }
+
+  .card {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(90vw, 460px);
+    background: linear-gradient(160deg, #fdf5e8, #f3e6d2);
+    color: #4a3624;
+    border: 2px solid #d9b98a;
+    border-radius: 22px;
+    padding: 26px 30px 30px;
+    z-index: 18;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .card.hidden { display: none; }
+
+  .card-emoji { font-size: 3.4rem; text-align: center; }
+
+  .card h2 {
+    font-family: "Pacifico", cursive;
+    text-align: center;
+    margin: 4px 0 16px;
+    font-size: 2.1rem;
+    color: #b5701f;
+  }
+
+  .card ul { margin: 0; padding-left: 22px; }
+  .card li { font-size: 1.12rem; line-height: 1.5; margin: 10px 0; }
+
+  .card-tag {
+    text-align: center;
+    font-size: 0.95rem;
+    color: #9c7a52;
+    margin: -10px 0 14px;
+  }
+
+  .card-close {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(74, 54, 36, 0.12);
+    color: #4a3624;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .card-close:hover { background: rgba(74, 54, 36, 0.25); }
+</style>
+</head>
+<body>
+  <nav>
+    <a href="i-love-you-elle.html">Home</a>
+    <a href="corgi-facts.html">Corgi Facts</a>
+    <a href="nutella-facts.html">Nutella Facts</a>
+    <a href="kwame-facts.html">Kwami Facts</a>
+    <a href="unicorn-run.html">Unicorn Run</a>
+    <a href="solar-system.html">Solar System</a>
+  </nav>
+
+  <div class="game-wrap">
+    <canvas id="space"></canvas>
+    <div class="hint" id="hint">Fly with Arrow keys / WASD &nbsp;&bull;&nbsp; Click a planet or moon for fun facts</div>
+
+    <div class="overlay" id="overlay">
+      <img class="astro-elle" src="cartoon-young-astronaut-floating-free-png.webp" alt="Astronaut Elle floating freely in space">
+
+      <h1>&#128640; Elle Explores Space</h1>
+      <p>Pilot your spaceship past the Sun and every planet.</p>
+      <p>Fly with the <b>Arrow keys</b> or <b>WASD</b>, then <b>click a planet or its moons</b> to discover fun facts about them!</p>
+      <button class="play-btn" id="startBtn">Blast Off &#11088;</button>
+    </div>
+
+    <div class="card hidden" id="card">
+      <button class="card-close" id="cardClose">&times;</button>
+      <div class="card-emoji" id="cardEmoji"></div>
+      <h2 id="cardName"></h2>
+      <div class="card-tag" id="cardTag"></div>
+      <ul id="cardFacts"></ul>
+    </div>
+  </div>
+
+<script>
+(function () {
+  const canvas = document.getElementById("space");
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  const overlay = document.getElementById("overlay");
+  const startBtn = document.getElementById("startBtn");
+  const hint = document.getElementById("hint");
+  const card = document.getElementById("card");
+
+  let W = 0, H = 0;
+  function resize() {
+    W = canvas.width = canvas.clientWidth;
+    H = canvas.height = canvas.clientHeight;
+    ctx.imageSmoothingQuality = "high"; // restore after canvas resize resets context
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // ---- Planets (positions spread across space, not to real scale) ----
+  const PLANETS = [
+    { name: "The Sun", emoji: "☀️", tag: "Our star", x: 0, y: 0, r: 95, c1: "#fff2a8", c2: "#ff8a00", sun: true,
+      facts: ["The Sun is a giant ball of glowing plasma — about 1.3 million Earths could fit inside it!",
+              "Its light takes about 8 minutes to travel all the way to Earth.",
+              "The Sun is roughly 4.6 billion years old, and it holds 99.8% of all the mass in the solar system."] },
+    { name: "Mercury", emoji: "☿️", tag: "1st planet", x: 720, y: -40, r: 16, c1: "#cdbfae", c2: "#7c7064",
+      facts: ["Mercury is the smallest planet and the closest one to the Sun.",
+              "A year on Mercury is only 88 Earth days — it zooms around the Sun super fast.",
+              "It has wild temperatures: scorching hot in the day and freezing cold at night.",
+              "Mercury has no moons at all."] },
+    { name: "Venus", emoji: "♀️", tag: "2nd planet", x: 1080, y: 60, r: 24, c1: "#ffe6a8", c2: "#c98a3e",
+      facts: ["Venus is the hottest planet — about 465°C — because of its thick, trapping atmosphere.",
+              "It spins backwards compared to most planets!",
+              "A day on Venus is longer than its whole year.",
+              "Like Mercury, Venus has no moons."] },
+    { name: "Earth", emoji: "🌍", tag: "Home sweet home", x: 1480, y: -70, r: 26, c1: "#7ec8ff", c2: "#1c5fb0", earth: true,
+      facts: ["Earth is the only place we know of with life — including you and me!",
+              "About 71% of Earth's surface is covered in water.",
+              "Earth has one Moon, which causes the ocean tides."],
+      moons: [
+        { name: "The Moon", emoji: "🌕", color: "#cfcfcf", r: 7, orbit: 55, speed: 0.02, phase: 0.4,
+          facts: ["Earth's Moon is the only place beyond Earth that humans have visited.",
+                  "It's about 384,000 km away — roughly 30 Earths could fit in the gap!",
+                  "The same side of the Moon always faces us.",
+                  "Footprints left by astronauts could last for millions of years."] },
+      ] },
+    { name: "Mars", emoji: "♂️", tag: "The Red Planet", x: 1880, y: 50, r: 20, c1: "#e0795a", c2: "#a3360e",
+      facts: ["Mars looks red because its soil is full of rusty iron.",
+              "It has the tallest volcano in the solar system, Olympus Mons — 3 times taller than Mount Everest!",
+              "Mars has two tiny moons named Phobos and Deimos."],
+      moons: [
+        { name: "Phobos", color: "#b09a86", r: 4, orbit: 38, speed: 0.05, phase: 0,
+          facts: ["Phobos is the larger of Mars's two moons.",
+                  "It zips around Mars so fast it rises and sets twice every day!",
+                  "Phobos is slowly spiraling closer to Mars."] },
+        { name: "Deimos", color: "#c9b9a6", r: 3, orbit: 58, speed: 0.032, phase: 2.2,
+          facts: ["Deimos is the smaller, outer moon of Mars.",
+                  "It's only about 12 km wide — you could bike across it!",
+                  "Its name means 'dread' in Greek."] },
+      ] },
+    { name: "Jupiter", emoji: "🪐", tag: "Biggest planet", x: 2520, y: -90, r: 62, c1: "#e8c9a0", c2: "#9c6b3e", jupiter: true,
+      facts: ["Jupiter is the largest planet — all the other planets could fit inside it!",
+              "Its Great Red Spot is a giant storm bigger than the whole Earth.",
+              "Jupiter has more than 95 moons orbiting it."],
+      moons: [
+        { name: "Io", color: "#e8d44d", r: 6, orbit: 88, speed: 0.045, phase: 0.5,
+          facts: ["Io is the most volcanic place in the whole solar system.",
+                  "It has hundreds of erupting volcanoes!",
+                  "Io is a little bigger than Earth's Moon."] },
+        { name: "Europa", color: "#dccdb0", r: 6, orbit: 112, speed: 0.036, phase: 2.4,
+          facts: ["Europa has a smooth, icy surface.",
+                  "Scientists think a salty ocean hides under its ice!",
+                  "It's one of the best places to search for alien life."] },
+        { name: "Ganymede", color: "#b0a48f", r: 8, orbit: 138, speed: 0.028, phase: 4.1,
+          facts: ["Ganymede is the largest moon in the solar system — even bigger than the planet Mercury!",
+                  "It's the only moon known to have its own magnetic field."] },
+        { name: "Callisto", color: "#8f857a", r: 7, orbit: 164, speed: 0.022, phase: 5.6,
+          facts: ["Callisto is one of the most cratered objects in the solar system.",
+                  "It may also hide a secret underground ocean."] },
+      ] },
+    { name: "Saturn", emoji: "🪐", tag: "Lord of the rings", x: 3220, y: 70, r: 54, c1: "#f0dca0", c2: "#b8954e", ring: true,
+      facts: ["Saturn's beautiful rings are made of billions of pieces of ice and rock.",
+              "Saturn is so light that it would float in a giant bathtub of water!",
+              "It has more than 140 moons — the most of any planet."],
+      moons: [
+        { name: "Titan", color: "#e0a94d", r: 8, orbit: 98, speed: 0.03, phase: 1.0,
+          facts: ["Titan is Saturn's biggest moon and the 2nd largest in the solar system.",
+                  "It has rivers and lakes — but of liquid methane, not water!",
+                  "It's the only moon with a thick atmosphere."] },
+        { name: "Enceladus", color: "#eef4ff", r: 5, orbit: 126, speed: 0.04, phase: 3.0,
+          facts: ["Enceladus shoots giant icy water jets into space from its south pole!",
+                  "It's one of the shiniest, whitest objects in the solar system.",
+                  "It hides a salty ocean under its frozen crust."] },
+        { name: "Mimas", color: "#cfd2d6", r: 4, orbit: 150, speed: 0.05, phase: 5.0,
+          facts: ["Mimas has a giant crater that makes it look just like the Death Star!",
+                  "It's one of Saturn's smaller round moons."] },
+      ] },
+    { name: "Uranus", emoji: "🌀", tag: "7th planet", x: 3820, y: -60, r: 38, c1: "#bdf3f0", c2: "#5aa9b8",
+      facts: ["Uranus rolls on its side, like a ball rolling along its orbit!",
+              "It looks blue-green because of a gas called methane in its air.",
+              "Uranus has the coldest atmosphere of any planet in the solar system."],
+      moons: [
+        { name: "Titania", color: "#b8c4c9", r: 5, orbit: 62, speed: 0.03, phase: 0.8,
+          facts: ["Titania is the largest moon of Uranus.",
+                  "It has enormous canyons carved across its surface."] },
+        { name: "Miranda", color: "#aeb6bb", r: 4, orbit: 84, speed: 0.044, phase: 3.3,
+          facts: ["Miranda has some of the strangest, most jumbled terrain anywhere.",
+                  "It has a cliff that may be the tallest in the whole solar system!"] },
+      ] },
+    { name: "Neptune", emoji: "🔵", tag: "Farthest planet", x: 4380, y: 60, r: 37, c1: "#7aa0ff", c2: "#2b3fb0",
+      facts: ["Neptune is the farthest planet from the Sun.",
+              "It has the fastest winds in the solar system — up to 2,100 km/h!",
+              "One year on Neptune lasts about 165 Earth years."],
+      moons: [
+        { name: "Triton", color: "#cfe0e6", r: 6, orbit: 64, speed: -0.03, phase: 1.5,
+          facts: ["Triton orbits Neptune backwards compared to the way the planet spins!",
+                  "It has icy volcanoes that erupt freezing nitrogen.",
+                  "Triton is one of the coldest places in the solar system."] },
+      ] },
+    { name: "Pluto", emoji: "🤍", tag: "Dwarf planet", x: 4880, y: -30, r: 13, c1: "#e6d8c3", c2: "#a99883",
+      facts: ["Pluto was called the 9th planet until 2006, when it became a 'dwarf planet'.",
+              "It has a huge heart-shaped glacier on its surface!",
+              "Pluto is smaller than Earth's Moon."],
+      moons: [
+        { name: "Charon", color: "#c9bca8", r: 6, orbit: 30, speed: 0.04, phase: 2.0,
+          facts: ["Charon is so big compared to Pluto that they orbit each other like a double planet!",
+                  "It's about half the width of Pluto itself."] },
+      ] },
+  ];
+
+  // Global multiplier to keep moon orbits slow and easy to click.
+  const MOON_SPEED = 0.35;
+
+  // Give every moon a link back to its planet, plus a tag and a default emoji.
+  for (const p of PLANETS) {
+    if (!p.moons) continue;
+    for (const m of p.moons) {
+      m.parent = p;
+      m.tag = "Moon of " + p.name.replace(/^The /, "");
+      if (!m.emoji) m.emoji = "🌙";
+    }
+  }
+
+  // ---- Stars (parallax, wrapping) ----
+  const stars = [];
+  for (let i = 0; i < 220; i++) {
+    stars.push({ bx: Math.random() * 2000, by: Math.random() * 1400,
+      depth: 0.15 + Math.random() * 0.6, size: Math.random() * 1.8 + 0.4, phase: Math.random() * Math.PI * 2 });
+  }
+  function mod(n, m) { return ((n % m) + m) % m; }
+
+  // ---- Ship & state ----
+  let state = "start";
+  const ship = { x: 360, y: 0, vx: 0, vy: 0, angle: 0 };
+  const cam = { x: 360, y: 0 };
+  const keys = {};
+  let frame = 0;
+
+  // Elle's rocket ship sprite (nose points right by default)
+  const astroImg = new Image();
+  let astroReady = false;
+  astroImg.onload = function () { astroReady = true; };
+  astroImg.src = "elle-rocket.png";
+
+  window.addEventListener("keydown", function (e) {
+    keys[e.key.toLowerCase()] = true;
+    if (["arrowup", "arrowdown", "arrowleft", "arrowright"].includes(e.key.toLowerCase())) e.preventDefault();
+  });
+  window.addEventListener("keyup", function (e) { keys[e.key.toLowerCase()] = false; });
+
+  function startGame() { state = "fly"; overlay.classList.add("hidden"); }
+  startBtn.addEventListener("click", startGame);
+
+  // ---- Click a planet ----
+  canvas.addEventListener("pointerdown", function (e) {
+    if (state !== "fly") return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const wx = cam.x + (mx - W / 2), wy = cam.y + (my - H / 2);
+    let hit = null, hd = Infinity;
+    for (const p of PLANETS) {
+      const d = Math.hypot(wx - p.x, wy - p.y);
+      if (d < p.r + 14 && d < hd) { hd = d; hit = p; }
+      if (p.moons) for (const m of p.moons) {
+        const a = m.phase + frame * m.speed * MOON_SPEED;
+        const mxx = p.x + Math.cos(a) * m.orbit, myy = p.y + Math.sin(a) * m.orbit * 0.55;
+        const dm = Math.hypot(wx - mxx, wy - myy);
+        if (dm < m.r + 12 && dm < hd) { hd = dm; hit = m; }
+      }
+    }
+    if (hit) openCard(hit);
+  });
+
+  function openCard(p) {
+    document.getElementById("cardEmoji").textContent = p.emoji;
+    document.getElementById("cardName").textContent = p.name;
+    document.getElementById("cardTag").textContent = p.tag;
+    const ul = document.getElementById("cardFacts");
+    ul.innerHTML = "";
+    for (const f of p.facts) { const li = document.createElement("li"); li.textContent = f; ul.appendChild(li); }
+    card.classList.remove("hidden");
+  }
+  function closeCard() { card.classList.add("hidden"); }
+  document.getElementById("cardClose").addEventListener("click", closeCard);
+
+  // ---- Drawing helpers ----
+  function shade(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = Math.round(((n >> 16) & 255) * f);
+    const g = Math.round(((n >> 8) & 255) * f);
+    const b = Math.round((n & 255) * f);
+    return "rgb(" + r + "," + g + "," + b + ")";
+  }
+
+  function drawMoon(p, m, psx, psy) {
+    const a = m.phase + frame * m.speed * MOON_SPEED;
+    const ox = Math.cos(a) * m.orbit, oy = Math.sin(a) * m.orbit * 0.55;
+
+    // faint orbit ring
+    ctx.strokeStyle = "rgba(255,255,255,0.07)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(psx, psy, m.orbit, m.orbit * 0.55, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    const mx = psx + ox, my = psy + oy;
+    drawSphere(mx, my, m.r, m.color, shade(m.color, 0.45));
+    // soft outline
+    ctx.strokeStyle = "rgba(40,28,20,0.3)";
+    ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(mx, my, m.r, 0, Math.PI * 2); ctx.stroke();
+
+    const near = Math.hypot(ship.x - (p.x + ox), ship.y - (p.y + oy)) < m.r + 90;
+    if (near) {
+      ctx.strokeStyle = "rgba(255,206,140," + (0.45 + Math.sin(frame * 0.12) * 0.3) + ")";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.arc(mx, my, m.r + 7, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "#ffe1a8";
+      ctx.font = "bold 13px 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(m.name + " (click!)", mx, my + m.r + 5);
+    }
+  }
+
+  function drawSphere(sx, sy, r, c1, c2) {
+    const g = ctx.createRadialGradient(sx - r * 0.35, sy - r * 0.35, r * 0.1, sx, sy, r);
+    g.addColorStop(0, c1);
+    g.addColorStop(1, c2);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawPlanet(p, sx, sy) {
+    if (p.sun) {
+      const glow = p.r + 30 + Math.sin(frame * 0.05) * 8;
+      const gg = ctx.createRadialGradient(sx, sy, p.r * 0.6, sx, sy, glow + 50);
+      gg.addColorStop(0, "rgba(255,180,60,0.5)");
+      gg.addColorStop(1, "rgba(255,140,0,0)");
+      ctx.fillStyle = gg;
+      ctx.beginPath();
+      ctx.arc(sx, sy, glow + 50, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (p.ring) {
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(-0.45);
+      ctx.strokeStyle = "rgba(230,210,150,0.85)";
+      ctx.lineWidth = p.r * 0.28;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, p.r * 1.9, p.r * 0.62, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    drawSphere(sx, sy, p.r, p.c1, p.c2);
+
+    if (p.earth) {
+      ctx.fillStyle = "rgba(60,170,90,0.85)";
+      ctx.beginPath(); ctx.arc(sx - p.r * 0.2, sy - p.r * 0.1, p.r * 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + p.r * 0.35, sy + p.r * 0.35, p.r * 0.28, 0, Math.PI * 2); ctx.fill();
+    }
+    if (p.jupiter) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(sx, sy, p.r, 0, Math.PI * 2); ctx.clip();
+      ctx.strokeStyle = "rgba(150,100,60,0.5)";
+      ctx.lineWidth = p.r * 0.18;
+      for (let b = -2; b <= 2; b++) {
+        ctx.beginPath(); ctx.moveTo(sx - p.r, sy + b * p.r * 0.42); ctx.lineTo(sx + p.r, sy + b * p.r * 0.42); ctx.stroke();
+      }
+      ctx.fillStyle = "#c1440e";
+      ctx.beginPath(); ctx.ellipse(sx + p.r * 0.25, sy + p.r * 0.25, p.r * 0.28, p.r * 0.18, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // soft hand-drawn outline (storybook style)
+    if (!p.sun) {
+      ctx.strokeStyle = "rgba(40,28,20,0.28)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(sx, sy, p.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // proximity highlight + name label
+    const distShip = Math.hypot(ship.x - p.x, ship.y - p.y);
+    const near = distShip < p.r + 150;
+    if (near) {
+      ctx.strokeStyle = "rgba(255,206,140," + (0.45 + Math.sin(frame * 0.12) * 0.3) + ")";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(sx, sy, p.r + 12, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = near ? "#ffe1a8" : "rgba(255,244,224,0.7)";
+    ctx.font = (near ? "bold " : "") + "16px 'Segoe UI', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(p.name + (near ? "  (click me!)" : ""), sx, sy + p.r + 8);
+  }
+
+  function drawAstronaut() {
+    const cxp = W / 2, cyp = H / 2;
+    const bob = Math.sin(frame * 0.05) * 5;
+    const aw = 190;
+    const ratio = (astroReady && astroImg.naturalWidth) ? astroImg.naturalHeight / astroImg.naturalWidth : 0.667;
+    const ah = aw * ratio;
+
+    if (astroReady) {
+      ctx.save();
+      ctx.translate(cxp, cyp + bob);
+      // point the rocket the way it's flying; flip upright when heading left
+      const ang = ship.angle;
+      ctx.rotate(ang);
+      if (Math.cos(ang) < 0) ctx.scale(1, -1);
+
+      // flame from the tail when thrusting
+      const thrusting = keys["arrowup"] || keys["arrowdown"] || keys["arrowleft"] || keys["arrowright"] ||
+                        keys["w"] || keys["a"] || keys["s"] || keys["d"];
+      if (thrusting) {
+        // nozzle exit measured from the sprite: ~35% left of centre, ~9% below the middle
+        const fx = -aw * 0.352, fy = ah * 0.088, flick = Math.random() * aw * 0.07;
+        ctx.fillStyle = "#ffd24d";
+        ctx.beginPath();
+        ctx.moveTo(fx, fy - ah * 0.075);
+        ctx.lineTo(fx - aw * 0.20 - flick, fy);
+        ctx.lineTo(fx, fy + ah * 0.075);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#ff7b2e";
+        ctx.beginPath();
+        ctx.moveTo(fx, fy - ah * 0.045);
+        ctx.lineTo(fx - aw * 0.11 - flick * 0.6, fy);
+        ctx.lineTo(fx, fy + ah * 0.045);
+        ctx.closePath(); ctx.fill();
+      }
+
+      ctx.drawImage(astroImg, -aw / 2, -ah / 2, aw, ah);
+      ctx.restore();
+    }
+
+    // ---- Name label: Astronaut Elle ----
+    ctx.font = "bold 15px 'Segoe UI', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const label = "Astronaut Elle";
+    const tw = ctx.measureText(label).width;
+    const ly = cyp + bob + ah / 2 - 4;
+    ctx.fillStyle = "rgba(40,28,16,0.6)";
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(cxp - tw / 2 - 9, ly, tw + 18, 22, 11);
+    else ctx.rect(cxp - tw / 2 - 9, ly, tw + 18, 22);
+    ctx.fill();
+    ctx.fillStyle = "#ffe3b8";
+    ctx.fillText(label, cxp, ly + 11);
+  }
+
+  function update() {
+    frame++;
+    if (state === "fly") {
+      const ax = (keys["arrowright"] || keys["d"] ? 1 : 0) - (keys["arrowleft"] || keys["a"] ? 1 : 0);
+      const ay = (keys["arrowdown"] || keys["s"] ? 1 : 0) - (keys["arrowup"] || keys["w"] ? 1 : 0);
+      const ACC = 0.5;
+      ship.vx += ax * ACC;
+      ship.vy += ay * ACC;
+      ship.vx *= 0.94;
+      ship.vy *= 0.94;
+      const sp = Math.hypot(ship.vx, ship.vy);
+      const MAX = 9;
+      if (sp > MAX) { ship.vx = ship.vx / sp * MAX; ship.vy = ship.vy / sp * MAX; }
+      ship.x += ship.vx;
+      ship.y += ship.vy;
+      if (sp > 0.4) ship.angle = Math.atan2(ship.vy, ship.vx);
+    }
+    cam.x += (ship.x - cam.x) * 0.1;
+    cam.y += (ship.y - cam.y) * 0.1;
+  }
+
+  function draw() {
+    // deep space background (warm storybook night)
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, "#171026");
+    bg.addColorStop(1, "#0a0712");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // stars
+    for (const s of stars) {
+      const sx = mod(s.bx - cam.x * s.depth, W);
+      const sy = mod(s.by - cam.y * s.depth, H);
+      ctx.globalAlpha = 0.4 + Math.sin(frame * 0.05 + s.phase) * 0.35 + 0.25;
+      ctx.fillStyle = "#fff4e0";
+      ctx.beginPath();
+      ctx.arc(sx, sy, s.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // planets
+    for (const p of PLANETS) {
+      const sx = p.x - cam.x + W / 2;
+      const sy = p.y - cam.y + H / 2;
+      if (sx < -320 || sx > W + 320 || sy < -320 || sy > H + 320) continue;
+      drawPlanet(p, sx, sy);
+      if (p.moons) for (const m of p.moons) drawMoon(p, m, sx, sy);
+    }
+
+    if (state === "fly") drawAstronaut();
+  }
+
+  function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+</script>
+</body>
+</html>
