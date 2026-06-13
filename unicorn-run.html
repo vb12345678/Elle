@@ -188,6 +188,12 @@
 
   const unicorn = { x: 0, y: 0, vy: 0, size: 60, onGround: true };
 
+  // Unicorn gallop sprite sheet: 8 frames side by side (faces left; flipped when drawn)
+  const unicornImg = new Image();
+  let unicornReady = false;
+  unicornImg.onload = function () { unicornReady = true; };
+  unicornImg.src = "unicorn-gallop.png";
+
   function reset() {
     score = 0;
     speed = 6;
@@ -390,29 +396,33 @@
   }
 
   function drawUnicorn() {
-    // rainbow trail
-    trail.push({ x: unicorn.x - unicorn.size * 0.4, y: unicorn.y - unicorn.size * 0.45, life: 1 });
-    if (trail.length > 18) trail.shift();
-    const colors = ["#ff5b5b", "#ffae3b", "#ffe93b", "#5bff7a", "#5bd2ff", "#b06bff"];
-    for (let i = 0; i < trail.length; i++) {
-      const t = trail[i];
-      t.x -= speed * 0.6;
-      ctx.globalAlpha = (i / trail.length) * 0.6;
-      ctx.fillStyle = colors[i % colors.length];
-      ctx.beginPath();
-      ctx.arc(t.x, t.y, unicorn.size * 0.18, 0, Math.PI * 2);
-      ctx.fill();
+    // galloping unicorn — cycle through the sprite sheet (each frame is centred
+    // on the unicorn's body, so the torso stays steady while the legs move).
+    if (unicornReady) {
+      const FRAMES = 8;
+      const fw = unicornImg.naturalWidth / FRAMES;
+      const fh = unicornImg.naturalHeight;
+      const sh = 130;
+      const sw = sh * (fw / fh);
+      const FOOT_FRAC = 0.88; // feet sit 88% down the frame -> plant them on the ground
+      // tie the gallop to distance travelled so the legs match the ground speed
+      // (no foot-sliding); hold a leaping pose (frame 5) while in the air.
+      // Cycle only the dynamic gallop poses (frames 2–7); frames 1 & 8 are
+      // near-standing poses that look like a pause at the loop point.
+      const SEQ = [1, 2, 3, 4, 5, 6]; // 0-based indices = sprite frames 2–7
+      const STRIDE = 2.5;             // larger = legs cycle slower per distance
+      const idx = unicorn.onGround ? SEQ[Math.floor(score / STRIDE) % SEQ.length] : 4;
+      ctx.save();
+      ctx.translate(unicorn.x, unicorn.y);            // unicorn.y is the ground line
+      ctx.scale(-1, 1); // flip to face right (the run direction)
+      ctx.drawImage(unicornImg, idx * fw, 0, fw, fh, -sw / 2, -FOOT_FRAC * sh, sw, sh);
+      ctx.restore();
     }
-    ctx.globalAlpha = 1;
-
-    // full unicorn body with a little run bob
-    const bob = unicorn.onGround ? Math.sin(frame * 0.4) * 3 : 0;
-    drawUnicornBody(unicorn.x, unicorn.y + bob, unicorn.size);
   }
 
   const RAINBOW = ["#ff5b5b", "#ffae3b", "#ffe93b", "#5bff7a", "#5bd2ff", "#b06bff"];
 
-  // Draws a whole unicorn facing right, feet resting at feetY.
+  // (legacy drawn unicorn — kept for reference, no longer used)
   function drawUnicornBody(cx, feetY, u) {
     const s = u / 60;
     const gallop = unicorn.onGround ? frame * 0.45 : 1.2;
@@ -578,10 +588,10 @@
       obstacles = obstacles.filter(o => o.x > -80);
 
       const ub = {
-        left: unicorn.x - unicorn.size * 0.32,
-        right: unicorn.x + unicorn.size * 0.32,
-        top: unicorn.y - unicorn.size * 0.72,
-        bottom: unicorn.y - unicorn.size * 0.05
+        left: unicorn.x - unicorn.size * 0.45,
+        right: unicorn.x + unicorn.size * 0.45,
+        top: unicorn.y - unicorn.size * 0.82,
+        bottom: unicorn.y - unicorn.size * 0.04
       };
       for (const o of obstacles) {
         const ob = {
