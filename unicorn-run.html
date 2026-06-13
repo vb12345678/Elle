@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title> ELLE'S Unicorn Run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<style>
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: #0d1b12;
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #fff;
+    overflow: hidden;
+  }
+
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    padding: 18px 0;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(4px);
+    z-index: 10;
+  }
+
+  nav a {
+    color: #fff;
+    text-decoration: none;
+    font-size: 1.4rem;
+    transition: color 0.2s, text-shadow 0.2s;
+  }
+
+  nav a:hover {
+    color: #ff66cc;
+    text-shadow: 0 0 12px #ff66cc;
+  }
+
+  .game-wrap {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: manipulation;
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: rgba(13, 27, 18, 0.55);
+    backdrop-filter: blur(2px);
+    cursor: pointer;
+  }
+
+  .overlay.hidden { display: none; }
+
+  .overlay h1 {
+    font-family: "Pacifico", cursive;
+    font-size: clamp(2.5rem, 8vw, 5rem);
+    margin: 0 0 10px;
+    color: #ff9ae0;
+    text-shadow: 0 0 20px #c44dad;
+  }
+
+  .overlay p {
+    font-size: clamp(1.1rem, 3.5vw, 1.6rem);
+    margin: 6px 0;
+  }
+
+  .play-btn {
+    margin-top: 22px;
+    padding: 14px 38px;
+    font-size: 1.5rem;
+    font-family: "Pacifico", cursive;
+    color: #fff;
+    background: linear-gradient(90deg, #ff66cc, #b06bff);
+    border: none;
+    border-radius: 40px;
+    cursor: pointer;
+    box-shadow: 0 0 22px rgba(255, 102, 204, 0.7);
+    transition: transform 0.15s;
+  }
+
+  .play-btn:hover { transform: scale(1.06); }
+</style>
+</head>
+<body>
+  <nav>
+    <a href="i-love-you-elle.html">Home</a>
+    <a href="corgi-facts.html">Corgi Facts</a>
+    <a href="nutella-facts.html">Nutella Facts</a>
+    <a href="kwame-facts.html">Kwami Facts</a>
+    <a href="unicorn-run.html">Unicorn Run</a>
+  </nav>
+
+  <div class="game-wrap">
+    <canvas id="game"></canvas>
+
+    <div class="overlay" id="overlay">
+      <h1>&#129412; Elle'S Unicorn Run</h1>
+      <p>Help the unicorn dash through the magic forest!</p>
+      <p>Tap, click, or press <b>Space</b> / <b>&uarr;</b> to jump.</p>
+      <button class="play-btn" id="startBtn">Play &#9733;</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const overlay = document.getElementById("overlay");
+  const startBtn = document.getElementById("startBtn");
+
+  let W = 0, H = 0, ground = 0;
+
+  function resize() {
+    W = canvas.width = canvas.clientWidth;
+    H = canvas.height = canvas.clientHeight;
+    ground = H * 0.82;
+    unicorn.x = W * 0.18;
+    if (state !== "play") unicorn.y = ground;
+  }
+
+  // ---- Game state ----
+  let state = "start";            // start | play | over
+  let score = 0;
+  let best = +(localStorage.getItem("unicornBest") || 0);
+  let speed = 6;
+  let spawnTimer = 0;
+  let obstacles = [];
+  let trail = [];
+  let bgTrees = [];
+  let frame = 0;
+
+  const GRAV = 0.8;
+  const JUMP = 17;
+
+  const unicorn = { x: 0, y: 0, vy: 0, size: 60, onGround: true };
+
+  function reset() {
+    score = 0;
+    speed = 6;
+    spawnTimer = 40;
+    obstacles = [];
+    trail = [];
+    unicorn.y = ground;
+    unicorn.vy = 0;
+    unicorn.onGround = true;
+  }
+
+  function seedTrees() {
+    bgTrees = [];
+    for (let i = 0; i < 14; i++) {
+      bgTrees.push({
+        x: Math.random() * W,
+        depth: 0.3 + Math.random() * 0.5,   // parallax factor
+        size: 40 + Math.random() * 70
+      });
+    }
+  }
+
+  function jump() {
+    if (state === "play" && unicorn.onGround) {
+      unicorn.vy = -JUMP;
+      unicorn.onGround = false;
+    }
+  }
+
+  function startGame() {
+    reset();
+    state = "play";
+    overlay.classList.add("hidden");
+  }
+
+  function gameOver() {
+    state = "over";
+    best = Math.max(best, Math.floor(score));
+    localStorage.setItem("unicornBest", best);
+    overlay.innerHTML =
+      '<h1>Game Over</h1>' +
+      '<p>You ran <b>' + Math.floor(score) + 'm</b> &#127807;</p>' +
+      '<p>Best: <b>' + best + 'm</b></p>' +
+      '<button class="play-btn" id="againBtn">Run Again &#9733;</button>';
+    overlay.classList.remove("hidden");
+    document.getElementById("againBtn").addEventListener("click", function (e) {
+      e.stopPropagation();
+      startGame();
+    });
+  }
+
+  // ---- Input ----
+  function handlePress(e) {
+    if (state === "play") { jump(); }
+  }
+  window.addEventListener("keydown", function (e) {
+    if (e.code === "Space" || e.code === "ArrowUp") {
+      e.preventDefault();
+      if (state === "start" || state === "over") startGame();
+      else jump();
+    }
+  });
+  canvas.addEventListener("pointerdown", handlePress);
+  startBtn.addEventListener("click", function (e) { e.stopPropagation(); startGame(); });
+
+  // ---- Drawing ----
+  function drawBackground() {
+    // sky
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, "#bdf0ff");
+    sky.addColorStop(0.5, "#dff7d8");
+    sky.addColorStop(1, "#9cd98f");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    // sun
+    ctx.fillStyle = "rgba(255, 244, 180, 0.9)";
+    ctx.beginPath();
+    ctx.arc(W * 0.82, H * 0.2, 45, 0, Math.PI * 2);
+    ctx.fill();
+
+    // background trees (parallax)
+    for (const t of bgTrees) {
+      if (state === "play") t.x -= speed * t.depth;
+      if (t.x < -t.size) { t.x = W + t.size; t.depth = 0.3 + Math.random() * 0.5; t.size = 40 + Math.random() * 70; }
+      drawTree(t.x, ground, t.size, t.depth);
+    }
+
+    // ground
+    const g = ctx.createLinearGradient(0, ground, 0, H);
+    g.addColorStop(0, "#4a8a3a");
+    g.addColorStop(1, "#2c5a23");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, ground, W, H - ground);
+    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, ground);
+    ctx.lineTo(W, ground);
+    ctx.stroke();
+  }
+
+  function drawTree(x, baseY, size, depth) {
+    const shade = Math.floor(120 * depth);
+    ctx.fillStyle = "rgb(" + (60 + shade) + "," + (40 + shade) + ",30)";
+    ctx.fillRect(x - size * 0.06, baseY - size, size * 0.12, size);
+    ctx.fillStyle = "rgba(" + (30 + shade) + "," + (110 + shade) + "," + (40 + shade) + ",0.95)";
+    ctx.beginPath();
+    ctx.moveTo(x, baseY - size * 1.9);
+    ctx.lineTo(x - size * 0.5, baseY - size * 0.7);
+    ctx.lineTo(x + size * 0.5, baseY - size * 0.7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x, baseY - size * 1.5);
+    ctx.lineTo(x - size * 0.55, baseY - size * 0.4);
+    ctx.lineTo(x + size * 0.55, baseY - size * 0.4);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawUnicorn() {
+    // rainbow trail
+    trail.push({ x: unicorn.x - unicorn.size * 0.4, y: unicorn.y - unicorn.size * 0.45, life: 1 });
+    if (trail.length > 18) trail.shift();
+    const colors = ["#ff5b5b", "#ffae3b", "#ffe93b", "#5bff7a", "#5bd2ff", "#b06bff"];
+    for (let i = 0; i < trail.length; i++) {
+      const t = trail[i];
+      t.x -= speed * 0.6;
+      ctx.globalAlpha = (i / trail.length) * 0.6;
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, unicorn.size * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // unicorn emoji with a little run bob (flipped to face right)
+    const bob = unicorn.onGround ? Math.sin(frame * 0.4) * 3 : 0;
+    ctx.font = unicorn.size + "px serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.save();
+    ctx.translate(unicorn.x, unicorn.y + bob);
+    ctx.scale(-1, 1);
+    ctx.fillText("🦄", 0, 0);
+    ctx.restore();
+  }
+
+  function drawObstacles() {
+    for (const o of obstacles) {
+      ctx.font = o.size + "px serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(o.emoji, o.x, ground);
+    }
+  }
+
+  function drawScore() {
+    ctx.fillStyle = "#1c3a16";
+    ctx.font = "bold 26px 'Segoe UI', sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("Distance: " + Math.floor(score) + "m", 18, 70);
+    ctx.fillText("Best: " + best + "m", 18, 102);
+  }
+
+  // ---- Update ----
+  const OBSTACLE_TYPES = [
+    { emoji: "🪵", size: 46 }, // log
+    { emoji: "🪨", size: 40 }, // rock
+    { emoji: "🍄", size: 40 }, // mushroom
+    { emoji: "🌲", size: 30 }  // small evergreen
+  ];
+
+  function spawnObstacle() {
+    const t = OBSTACLE_TYPES[Math.floor(Math.random() * OBSTACLE_TYPES.length)];
+    obstacles.push({ x: W + 60, emoji: t.emoji, size: t.size, w: t.size * 0.7, h: t.size });
+  }
+
+  function update() {
+    frame++;
+    if (state === "play") {
+      score += speed * 0.04;
+      speed += 0.0025;
+
+      // physics
+      unicorn.vy += GRAV;
+      unicorn.y += unicorn.vy;
+      if (unicorn.y >= ground) {
+        unicorn.y = ground;
+        unicorn.vy = 0;
+        unicorn.onGround = true;
+      }
+
+      // spawn
+      spawnTimer--;
+      if (spawnTimer <= 0) {
+        spawnObstacle();
+        spawnTimer = Math.max(45, 110 - speed * 4) + Math.random() * 40;
+      }
+
+      // move + collide
+      for (const o of obstacles) o.x -= speed;
+      obstacles = obstacles.filter(o => o.x > -80);
+
+      const ub = {
+        left: unicorn.x - unicorn.size * 0.32,
+        right: unicorn.x + unicorn.size * 0.32,
+        top: unicorn.y - unicorn.size * 0.72,
+        bottom: unicorn.y - unicorn.size * 0.05
+      };
+      for (const o of obstacles) {
+        const ob = {
+          left: o.x - o.w * 0.5,
+          right: o.x + o.w * 0.5,
+          top: ground - o.h,
+          bottom: ground
+        };
+        if (ub.right > ob.left && ub.left < ob.right &&
+            ub.bottom > ob.top && ub.top < ob.bottom) {
+          gameOver();
+          break;
+        }
+      }
+    }
+  }
+
+  function loop() {
+    update();
+    drawBackground();
+    drawObstacles();
+    drawUnicorn();
+    if (state !== "start") drawScore();
+    requestAnimationFrame(loop);
+  }
+
+  window.addEventListener("resize", resize);
+  resize();
+  seedTrees();
+  loop();
+})();
+</script>
+</body>
+</html>
