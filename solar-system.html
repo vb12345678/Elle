@@ -49,6 +49,7 @@
     position: relative;
     width: 100%;
     height: 100vh;
+    height: 100dvh;
   }
 
   canvas {
@@ -182,6 +183,15 @@
   }
 
   .card-close:hover { background: rgba(74, 54, 36, 0.25); }
+
+  @media (max-width: 600px) {
+    nav { gap: 12px 16px; padding: 12px 8px; }
+    nav a { font-size: 1.05rem; }
+    .hint { font-size: 0.82rem; bottom: 10px; padding: 6px 12px; width: 92%; box-sizing: border-box; }
+    .card { padding: 22px 20px 24px; }
+    .card h2 { font-size: 1.8rem; }
+    .card li { font-size: 1.02rem; }
+  }
 </style>
 </head>
 <body>
@@ -196,14 +206,14 @@
 
   <div class="game-wrap">
     <canvas id="space"></canvas>
-    <div class="hint" id="hint">Fly with Arrow keys / WASD &nbsp;&bull;&nbsp; Click a planet or moon for fun facts</div>
+    <div class="hint" id="hint">Drag to fly (or Arrow keys / WASD) &nbsp;&bull;&nbsp; Tap a planet or moon for fun facts</div>
 
     <div class="overlay" id="overlay">
       <img class="astro-elle" src="cartoon-young-astronaut-floating-free-png.webp" alt="Astronaut Elle floating freely in space">
 
       <h1>&#128640; Elle Explores Space</h1>
       <p>Pilot your spaceship past the Sun and every planet.</p>
-      <p>Fly with the <b>Arrow keys</b> or <b>WASD</b>, then <b>click a planet or its moons</b> to discover fun facts about them!</p>
+      <p>Fly by <b>dragging</b> on the screen (or with the <b>Arrow keys</b> / <b>WASD</b>), then <b>tap a planet or its moons</b> to discover fun facts about them!</p>
       <button class="play-btn" id="startBtn">Blast Off &#11088;</button>
     </div>
 
@@ -390,25 +400,51 @@
   function startGame() { state = "fly"; overlay.classList.add("hidden"); }
   startBtn.addEventListener("click", startGame);
 
-  // ---- Click a planet ----
-  canvas.addEventListener("pointerdown", function (e) {
-    if (state !== "fly") return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  // ---- Pointer: tap to select a planet/moon, drag to fly (touch joystick) ----
+  const touch = { active: false, moved: false, id: null, sx: 0, sy: 0, vx: 0, vy: 0 };
+
+  function selectAt(mx, my) {
     const wx = cam.x + (mx - W / 2), wy = cam.y + (my - H / 2);
     let hit = null, hd = Infinity;
     for (const p of PLANETS) {
       const d = Math.hypot(wx - p.x, wy - p.y);
-      if (d < p.r + 14 && d < hd) { hd = d; hit = p; }
+      if (d < p.r + 18 && d < hd) { hd = d; hit = p; }
       if (p.moons) for (const m of p.moons) {
         const a = m.phase + frame * m.speed * MOON_SPEED;
         const mxx = p.x + Math.cos(a) * m.orbit, myy = p.y + Math.sin(a) * m.orbit * 0.55;
         const dm = Math.hypot(wx - mxx, wy - myy);
-        if (dm < m.r + 12 && dm < hd) { hd = dm; hit = m; }
+        if (dm < m.r + 16 && dm < hd) { hd = dm; hit = m; }
       }
     }
     if (hit) openCard(hit);
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    if (state !== "fly") return;
+    const rect = canvas.getBoundingClientRect();
+    touch.active = true; touch.moved = false; touch.id = e.pointerId;
+    touch.sx = e.clientX - rect.left; touch.sy = e.clientY - rect.top;
+    touch.vx = 0; touch.vy = 0;
   });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!touch.active || e.pointerId !== touch.id) return;
+    const rect = canvas.getBoundingClientRect();
+    const dx = (e.clientX - rect.left) - touch.sx, dy = (e.clientY - rect.top) - touch.sy;
+    if (Math.hypot(dx, dy) > 10) touch.moved = true;
+    const k = 45;
+    touch.vx = Math.max(-1, Math.min(1, dx / k));
+    touch.vy = Math.max(-1, Math.min(1, dy / k));
+  });
+  function endTouch(e) {
+    if (e.pointerId !== touch.id) return;
+    if (touch.active && !touch.moved) {
+      const rect = canvas.getBoundingClientRect();
+      selectAt(e.clientX - rect.left, e.clientY - rect.top);
+    }
+    touch.active = false; touch.vx = 0; touch.vy = 0; touch.id = null;
+  }
+  canvas.addEventListener("pointerup", endTouch);
+  canvas.addEventListener("pointercancel", endTouch);
 
   function openCard(p) {
     document.getElementById("cardEmoji").textContent = p.emoji;
@@ -559,7 +595,7 @@
 
       // flame from the tail when thrusting
       const thrusting = keys["arrowup"] || keys["arrowdown"] || keys["arrowleft"] || keys["arrowright"] ||
-                        keys["w"] || keys["a"] || keys["s"] || keys["d"];
+                        keys["w"] || keys["a"] || keys["s"] || keys["d"] || (touch.active && touch.moved);
       if (thrusting) {
         // nozzle exit measured from the sprite: ~35% left of centre, ~9% below the middle
         const fx = -aw * 0.352, fy = ah * 0.088, flick = Math.random() * aw * 0.07;
@@ -600,8 +636,11 @@
   function update() {
     frame++;
     if (state === "fly") {
-      const ax = (keys["arrowright"] || keys["d"] ? 1 : 0) - (keys["arrowleft"] || keys["a"] ? 1 : 0);
-      const ay = (keys["arrowdown"] || keys["s"] ? 1 : 0) - (keys["arrowup"] || keys["w"] ? 1 : 0);
+      let ax = (keys["arrowright"] || keys["d"] ? 1 : 0) - (keys["arrowleft"] || keys["a"] ? 1 : 0);
+      let ay = (keys["arrowdown"] || keys["s"] ? 1 : 0) - (keys["arrowup"] || keys["w"] ? 1 : 0);
+      if (touch.active && touch.moved) { ax += touch.vx; ay += touch.vy; }
+      ax = Math.max(-1, Math.min(1, ax));
+      ay = Math.max(-1, Math.min(1, ay));
       const ACC = 0.5;
       ship.vx += ax * ACC;
       ship.vy += ay * ACC;
@@ -648,6 +687,16 @@
     }
 
     if (state === "fly") drawAstronaut();
+
+    // touch joystick indicator
+    if (state === "fly" && touch.active && touch.moved) {
+      const R = 46;
+      ctx.strokeStyle = "rgba(255,255,255,0.3)";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(touch.sx, touch.sy, R, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "rgba(255,206,140,0.6)";
+      ctx.beginPath(); ctx.arc(touch.sx + touch.vx * R, touch.sy + touch.vy * R, 18, 0, Math.PI * 2); ctx.fill();
+    }
   }
 
   function loop() {
