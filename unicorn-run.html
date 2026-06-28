@@ -151,6 +151,8 @@
       <h1>&#129412; Elle'S Unicorn Run</h1>
       <p>Help the unicorn dash through the magic forest!</p>
       <p>Tap, click, or press <b>Space</b> / <b>&uarr;</b> to jump.</p>
+      <p>Grab the &#11088; rainbow star to <b>fly</b> &mdash; tap to flap!</p>
+      <p>Grab the &#128150; rainbow heart to <b>smash</b> through anything!</p>
       <button class="play-btn" id="startBtn">Play &#9733;</button>
     </div>
   </div>
@@ -179,9 +181,26 @@
   let speed = 6;
   let spawnTimer = 0;
   let obstacles = [];
+  let stars = [];                 // rainbow power-up stars (flight)
+  let hearts = [];                // rainbow power-up hearts (smash)
+  let sparkles = [];              // burst particles (collect / smash effects)
+  let starTimer = 0;
+  let heartTimer = 0;
   let trail = [];
   let bgTrees = [];
   let frame = 0;
+
+  // flight power-up state
+  let flying = false;
+  let flyTimer = 0;
+  const FLY_DURATION = 60 * 9;    // ~9 seconds of flight
+  const FLY_GRAV = 0.4;           // gentle gravity while flying
+  const FLY_FLAP = 9;             // upward push per flap
+
+  // smash power-up state (run through obstacles to destroy them)
+  let smashing = false;
+  let smashTimer = 0;
+  const SMASH_DURATION = 60 * 9;  // ~9 seconds of smashing
 
   const GRAV = 0.8;
   const JUMP = 17;
@@ -194,11 +213,26 @@
   unicornImg.onload = function () { unicornReady = true; };
   unicornImg.src = "unicorn-gallop.png";
 
+  // Unicorn flying sprite sheet: 12 frames (wings flapping), centred on the body
+  const flyImg = new Image();
+  let flyReady = false;
+  flyImg.onload = function () { flyReady = true; };
+  flyImg.src = "unicorn-fly.png";
+
   function reset() {
     score = 0;
     speed = 6;
     spawnTimer = 40;
     obstacles = [];
+    stars = [];
+    hearts = [];
+    sparkles = [];
+    starTimer = 60 * 6;           // first star after ~6s
+    heartTimer = 60 * 9;          // first heart after ~9s
+    flying = false;
+    flyTimer = 0;
+    smashing = false;
+    smashTimer = 0;
     trail = [];
     unicorn.y = ground;
     unicorn.vy = 0;
@@ -217,9 +251,34 @@
   }
 
   function jump() {
-    if (state === "play" && unicorn.onGround) {
+    if (state !== "play") return;
+    if (flying) {                 // while flying, the same input flaps the wings
+      unicorn.vy = -FLY_FLAP;
+    } else if (unicorn.onGround) {
       unicorn.vy = -JUMP;
       unicorn.onGround = false;
+    }
+  }
+
+  function startFlight() {
+    flying = true;
+    flyTimer = FLY_DURATION;      // collecting again refreshes the timer
+    unicorn.onGround = false;
+    if (unicorn.vy > -4) unicorn.vy = -8;  // a little lift-off
+  }
+
+  function startSmash() {
+    smashing = true;
+    smashTimer = SMASH_DURATION;  // collecting again refreshes the timer
+  }
+
+  function burst(x, y, n) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 4;
+      sparkles.push({
+        x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1,
+        life: 1, hue: Math.floor(Math.random() * 360)
+      });
     }
   }
 
@@ -396,6 +455,29 @@
   }
 
   function drawUnicorn() {
+    // flying unicorn (power-up active) — wings flapping, centred on the body
+    if (flying && flyReady) {
+      const FN = 12;
+      const fw = flyImg.naturalWidth / FN;
+      const fh = flyImg.naturalHeight;
+      const sh = 175;
+      const sw = sh * (fw / fh);
+      const idx = Math.floor(frame / 7) % FN;
+      const blink = flyTimer < 90 && Math.floor(frame / 5) % 2 === 0; // warn near the end
+      ctx.save();
+      ctx.translate(unicorn.x, unicorn.y - sh * 0.30);   // body floats above the ref line
+      // soft rainbow aura
+      ctx.globalAlpha = 0.30 + 0.10 * Math.sin(frame * 0.2);
+      ctx.fillStyle = "hsl(" + ((frame * 5) % 360) + ",100%,65%)";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, sw * 0.5, sh * 0.42, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = blink ? 0.45 : 1;
+      ctx.scale(-1, 1); // face right
+      ctx.drawImage(flyImg, idx * fw, 0, fw, fh, -sw / 2, -sh / 2, sw, sh);
+      ctx.restore();
+      return;
+    }
     // galloping unicorn — cycle through the sprite sheet (each frame is centred
     // on the unicorn's body, so the torso stays steady while the legs move).
     if (unicornReady) {
@@ -406,7 +488,7 @@
       const sw = sh * (fw / fh);
       const FOOT_FRAC = 0.88; // feet sit 88% down the frame -> plant them on the ground
       // tie the gallop to distance travelled so the legs match the ground speed
-      // (no foot-sliding); hold a leaping pose (frame 5) while in the air.
+      // (no foot-sliding); hold a leaping pose (frame 5, air extend) while airborne.
       // Cycle only the dynamic gallop poses (frames 2–7); frames 1 & 8 are
       // near-standing poses that look like a pause at the loop point.
       const SEQ = [1, 2, 3, 4, 5, 6]; // 0-based indices = sprite frames 2–7
@@ -414,6 +496,16 @@
       const idx = unicorn.onGround ? SEQ[Math.floor(score / STRIDE) % SEQ.length] : 4;
       ctx.save();
       ctx.translate(unicorn.x, unicorn.y);            // unicorn.y is the ground line
+      // pink heart-power glow while smashing
+      if (smashing) {
+        const blink = smashTimer < 90 && Math.floor(frame / 5) % 2 === 0;
+        ctx.globalAlpha = (blink ? 0.18 : 0.4) + 0.1 * Math.sin(frame * 0.3);
+        ctx.fillStyle = "hsl(" + (330 + 20 * Math.sin(frame * 0.2)) + ",100%,68%)";
+        ctx.beginPath();
+        ctx.ellipse(0, -sh * 0.42, sw * 0.42, sh * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
       ctx.scale(-1, 1); // flip to face right (the run direction)
       ctx.drawImage(unicornImg, idx * fw, 0, fw, fh, -sw / 2, -FOOT_FRAC * sh, sw, sh);
       ctx.restore();
@@ -529,6 +621,79 @@
     }
   }
 
+  function starPath(cx, cy, outer, inner, rot) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const r = (i % 2 === 0) ? outer : inner;
+      const a = rot + i * Math.PI / 5;
+      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  function drawStars() {
+    for (const s of stars) {
+      const sy = s.y + Math.sin(frame * 0.1 + s.bob) * 6;
+      const hue = (frame * 8 + s.bob * 40) % 360;       // rainbow flash
+      const pulse = 1 + 0.12 * Math.sin(frame * 0.25 + s.bob);
+      ctx.save();
+      ctx.translate(s.x, sy);
+      ctx.rotate(Math.sin(frame * 0.04 + s.bob) * 0.25);
+      ctx.shadowColor = "hsl(" + hue + ",100%,60%)";
+      ctx.shadowBlur = 22;
+      ctx.fillStyle = "hsl(" + hue + ",100%,62%)";
+      starPath(0, 0, s.r * pulse, s.r * 0.45 * pulse, -Math.PI / 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      starPath(0, 0, s.r * 0.5 * pulse, s.r * 0.22 * pulse, -Math.PI / 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function heartPath(cx, cy, s) {
+    // s = overall radius-ish scale
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + s * 0.85);
+    ctx.bezierCurveTo(cx - s * 1.2, cy - s * 0.2, cx - s * 0.55, cy - s * 1.0, cx, cy - s * 0.35);
+    ctx.bezierCurveTo(cx + s * 0.55, cy - s * 1.0, cx + s * 1.2, cy - s * 0.2, cx, cy + s * 0.85);
+    ctx.closePath();
+  }
+
+  function drawHearts() {
+    for (const h of hearts) {
+      const hy = h.y + Math.sin(frame * 0.1 + h.bob) * 6;
+      const hue = (frame * 8 + h.bob * 40) % 360;       // rainbow flash
+      const pulse = 1 + 0.12 * Math.sin(frame * 0.25 + h.bob);
+      ctx.save();
+      ctx.translate(h.x, hy);
+      ctx.rotate(Math.sin(frame * 0.04 + h.bob) * 0.18);
+      ctx.shadowColor = "hsl(" + hue + ",100%,60%)";
+      ctx.shadowBlur = 22;
+      ctx.fillStyle = "hsl(" + hue + ",100%,62%)";
+      heartPath(0, 0, h.r * pulse);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      heartPath(0, -h.r * 0.05, h.r * 0.5 * pulse);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawSparkles() {
+    for (const p of sparkles) {
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = "hsl(" + p.hue + ",100%,65%)";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3.5 * p.life + 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function drawScore() {
     ctx.fillStyle = "#1c3a16";
     ctx.font = "bold 26px 'Segoe UI', sans-serif";
@@ -536,27 +701,57 @@
     ctx.textBaseline = "top";
     ctx.fillText("Distance: " + Math.floor(score) + "m", 18, 70);
     ctx.fillText("Best: " + best + "m", 18, 102);
+
+    // power-up timer bars (flight stacks above smash when both are active)
+    let by = 162;
+    if (flying)   by = powerBar("✨ Flying!",  flyTimer / FLY_DURATION,    by);
+    if (smashing) by = powerBar("💖 Smash!",   smashTimer / SMASH_DURATION, by);
+  }
+
+  function powerBar(label, frac, by) {
+    const bw = 180, bx = 18;
+    frac = Math.max(0, frac);
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.fillRect(bx, by, bw, 14);
+    const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+    grad.addColorStop(0, "#ff5b5b"); grad.addColorStop(0.5, "#ffe93b"); grad.addColorStop(1, "#5bd2ff");
+    ctx.fillStyle = grad;
+    ctx.fillRect(bx, by, bw * frac, 14);
+    ctx.fillStyle = "#1c3a16";
+    ctx.font = "bold 18px 'Segoe UI', sans-serif";
+    ctx.fillText(label, bx, by - 22);
+    return by + 44;   // next bar position
   }
 
   // ---- Update ----
   const OBSTACLE_TYPES = [
-    { emoji: "🪵", size: 46 }, // log
-    { emoji: "🪨", size: 40 }, // rock
-    { emoji: "🍄", size: 40 }, // mushroom
-    { emoji: "🌲", size: 34 }, // small evergreen
-    { emoji: "🦄", size: 50 }, // another unicorn!
-    { emoji: "🦊", size: 42 }, // fox
-    { emoji: "🦔", size: 36 }, // hedgehog
-    { emoji: "🐗", size: 46 }, // boar
-    { emoji: "🦌", size: 50 }, // deer
-    { emoji: "🐢", size: 38 }, // turtle
-    { emoji: "🌳", size: 40 }, // bush/tree
-    { emoji: "🪺", size: 36 }  // nest
+    { emoji: "🪵", size: 60 }, // log
+    { emoji: "🪨", size: 52 }, // rock
+    { emoji: "🍄", size: 52 }, // mushroom
+    { emoji: "🌲", size: 46 }, // small evergreen
+    { emoji: "🦄", size: 64 }, // another unicorn!
+    { emoji: "🦊", size: 54 }, // fox
+    { emoji: "🦔", size: 48 }, // hedgehog
+    { emoji: "🐗", size: 60 }, // boar
+    { emoji: "🦌", size: 64 }, // deer
+    { emoji: "🐢", size: 50 }, // turtle
+    { emoji: "🌳", size: 52 }, // bush/tree
+    { emoji: "🪺", size: 48 }  // nest
   ];
 
   function spawnObstacle(xOffset) {
     const t = OBSTACLE_TYPES[Math.floor(Math.random() * OBSTACLE_TYPES.length)];
     obstacles.push({ x: W + 60 + (xOffset || 0), emoji: t.emoji, size: t.size, w: t.size * 0.7, h: t.size });
+  }
+
+  function spawnStar() {
+    // float at a jump-reachable height above the ground
+    stars.push({ x: W + 70, y: ground - (90 + Math.random() * 90), r: 22, bob: Math.random() * 6.28 });
+  }
+
+  function spawnHeart() {
+    // float low so it can be grabbed while running (or with a little hop)
+    hearts.push({ x: W + 70, y: ground - (45 + Math.random() * 75), r: 22, bob: Math.random() * 6.28 });
   }
 
   function update() {
@@ -566,15 +761,27 @@
       speed += 0.0025;
 
       // physics
-      unicorn.vy += GRAV;
-      unicorn.y += unicorn.vy;
-      if (unicorn.y >= ground) {
-        unicorn.y = ground;
-        unicorn.vy = 0;
-        unicorn.onGround = true;
+      if (flying) {
+        unicorn.vy += FLY_GRAV;
+        unicorn.y += unicorn.vy;
+        const ceiling = H * 0.30;
+        if (unicorn.y < ceiling) { unicorn.y = ceiling; unicorn.vy = 0; }
+        if (unicorn.y > ground)  { unicorn.y = ground;  unicorn.vy = 0; }
+        unicorn.onGround = false;
+        if (frame % 4 === 0) burst(unicorn.x - 40, unicorn.y - 30, 1);  // sparkle trail
+        flyTimer--;
+        if (flyTimer <= 0) flying = false;     // drift back down, gravity takes over
+      } else {
+        unicorn.vy += GRAV;
+        unicorn.y += unicorn.vy;
+        if (unicorn.y >= ground) {
+          unicorn.y = ground;
+          unicorn.vy = 0;
+          unicorn.onGround = true;
+        }
       }
 
-      // spawn
+      // spawn obstacles
       spawnTimer--;
       if (spawnTimer <= 0) {
         spawnObstacle();
@@ -583,9 +790,31 @@
         spawnTimer = Math.max(38, 100 - speed * 4) + Math.random() * 35;
       }
 
-      // move + collide
+      // spawn power-up stars (flight)
+      starTimer--;
+      if (starTimer <= 0) {
+        spawnStar();
+        starTimer = 60 * (11 + Math.random() * 7);   // every ~11-18s
+      }
+
+      // spawn power-up hearts (smash)
+      heartTimer--;
+      if (heartTimer <= 0) {
+        spawnHeart();
+        heartTimer = 60 * (13 + Math.random() * 8);  // every ~13-21s
+      }
+
+      // smash power-up countdown
+      if (smashing) {
+        smashTimer--;
+        if (smashTimer <= 0) smashing = false;
+      }
+
+      // move obstacles + power-ups
       for (const o of obstacles) o.x -= speed;
       obstacles = obstacles.filter(o => o.x > -80);
+      for (const s of stars) s.x -= speed;
+      for (const h of hearts) h.x -= speed;
 
       const ub = {
         left: unicorn.x - unicorn.size * 0.45,
@@ -593,6 +822,33 @@
         top: unicorn.y - unicorn.size * 0.82,
         bottom: unicorn.y - unicorn.size * 0.04
       };
+
+      // collect stars -> start / refresh flight
+      for (const s of stars) {
+        const sy = s.y + Math.sin(frame * 0.1 + s.bob) * 6;
+        const cx = (ub.left + ub.right) / 2, cy = (ub.top + ub.bottom) / 2;
+        if (Math.hypot(s.x - cx, sy - cy) < s.r + unicorn.size * 0.5) {
+          s.dead = true;
+          burst(s.x, sy, 26);
+          startFlight();
+        }
+      }
+      stars = stars.filter(s => !s.dead && s.x > -60);
+
+      // collect hearts -> start / refresh smash power-up
+      for (const h of hearts) {
+        const hy = h.y + Math.sin(frame * 0.1 + h.bob) * 6;
+        const cx = (ub.left + ub.right) / 2, cy = (ub.top + ub.bottom) / 2;
+        if (Math.hypot(h.x - cx, hy - cy) < h.r + unicorn.size * 0.5) {
+          h.dead = true;
+          burst(h.x, hy, 26);
+          startSmash();
+        }
+      }
+      hearts = hearts.filter(h => !h.dead && h.x > -60);
+
+      // obstacle collisions — destroyed into sparkles while flying or smashing
+      const invincible = flying || smashing;
       for (const o of obstacles) {
         const ob = {
           left: o.x - o.w * 0.5,
@@ -602,10 +858,25 @@
         };
         if (ub.right > ob.left && ub.left < ob.right &&
             ub.bottom > ob.top && ub.top < ob.bottom) {
-          gameOver();
-          break;
+          if (invincible) {
+            o.dead = true;
+            burst(o.x, ground - o.h * 0.5, 14);
+          } else {
+            gameOver();
+            break;
+          }
         }
       }
+      if (invincible) obstacles = obstacles.filter(o => !o.dead);
+
+      // update sparkle particles
+      for (const p of sparkles) {
+        p.x += p.vx - speed * 0.3;
+        p.y += p.vy;
+        p.vy += 0.12;
+        p.life -= 0.025;
+      }
+      sparkles = sparkles.filter(p => p.life > 0);
     }
   }
 
@@ -613,7 +884,10 @@
     update();
     drawBackground();
     drawObstacles();
+    drawStars();
+    drawHearts();
     drawUnicorn();
+    drawSparkles();
     if (state !== "start") drawScore();
     requestAnimationFrame(loop);
   }
